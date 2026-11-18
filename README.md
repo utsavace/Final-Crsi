@@ -1,11 +1,12 @@
-<div align="center">
+# NSE ConnorsRSI Screener
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+Express + Vite/React app. Data: Yahoo Finance daily candles (NSE, `.NS`), fetched server-side.
 
-  <h1>Built with AI Studio</h2>
+Modules (tabs): ConnorsRSI screener, BB+CRSI, Darvas Box, Fibonacci 50%, Weekly Rounding Bottom, CRSI Min Ever (top-5 lows).
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+- Dev: `npm install && npm run dev`
+- Build: `npm run build` (vite + esbuild -> `dist/server.cjs`)
+- Render: push to GitHub; `render.yaml` handles build/start.
+- Type check: `npm run lint`
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
-
-</div>
+Educational use only. Not investment advice.

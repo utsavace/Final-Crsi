@@ -1,0 +1,5 @@
+{
+  "name": "NSE ConnorsRSI Screener",
+  "description": "NSE Nifty 500 screener: ConnorsRSI(3,2,100) + ADX + EMA200 backtest gate, Darvas Box, Fibonacci 50%, Weekly Rounding Bottom and CRSI Min-Ever (top-5 lows proximity).",
+  "requestFramePermissions": []
+}
