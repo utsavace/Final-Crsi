@@ -13,9 +13,9 @@ const MUTED   = '#cbd5e1';
 const DIM     = '#94a3b8';
 const MONO    = 'JetBrains Mono, monospace';
 
-type SortField = 'symbol' | 'stage' | 'window' | 'depth' | 'ratio' | 'r2' | 'lastClose';
-const STAGE_ORDER: Record<string, number> = { 'complete': 0, 'nearly complete': 1, 'forming': 2 };
-const STAGE_COLOR: Record<string, string> = { 'complete': '#22c55e', 'nearly complete': '#f59e0b', 'forming': '#eab308' };
+type SortField = 'symbol' | 'stage' | 'age' | 'window' | 'depth' | 'ratio' | 'r2' | 'lastClose';
+const STAGE_ORDER: Record<string, number> = { 'complete': 0, 'nearly complete': 1, 'forming': 2, 'retest': 3, 'extended': 4 };
+const STAGE_COLOR: Record<string, string> = { 'complete': '#22c55e', 'nearly complete': '#f59e0b', 'forming': '#eab308', 'extended': '#38bdf8', 'retest': '#a78bfa' };
 
 export const RoundingTable: React.FC<{ results: RoundingResult[]; isScanning: boolean }> = ({ results, isScanning }) => {
   const [search, setSearch] = useState('');
@@ -39,8 +39,8 @@ export const RoundingTable: React.FC<{ results: RoundingResult[]; isScanning: bo
 
   const exportCSV = () => {
     if (!sorted.length) return;
-    const h = ['Symbol','Date','Close','Stage','Window (weeks)','Window start','Depth %','Close vs left rim %','Left rim','Bottom low','R2'];
-    const rows = sorted.map(r => [r.symbol, r.date, r.lastClose, r.stage, r.window, r.startDate, r.depth, +(r.ratio * 100).toFixed(1), r.leftRim, r.bottomLow, r.r2]);
+    const h = ['Symbol','Date','Close','Stage','Ended (weeks ago)','Window (weeks)','Window start','Window end','Depth %','Close vs left rim %','Left rim','Bottom low','R2'];
+    const rows = sorted.map(r => [r.symbol, r.date, r.lastClose, r.stage, r.age, r.window, r.startDate, r.endDate, r.depth, +(r.ratio * 100).toFixed(1), r.leftRim, r.bottomLow, r.r2]);
     const a = document.createElement('a');
     a.href = 'data:text/csv;charset=utf-8,' + encodeURI([h, ...rows].map(x => x.join(',')).join('\n'));
     a.download = `weekly_rounding_bottom_${new Date().toISOString().slice(0, 10)}.csv`;
@@ -57,7 +57,7 @@ export const RoundingTable: React.FC<{ results: RoundingResult[]; isScanning: bo
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
         <div style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: 'rgba(20,184,166,0.12)', color: TEAL, border: '1px solid rgba(20,184,166,0.3)' }}>
-          Weekly rounding bottoms ({sorted.length}) — windows 26/40/60/90/130 weeks, R² ≥ 0.65
+          Weekly rounding bottoms ({sorted.length}) — windows 26/40/60/90/130 weeks, R² ≥ 0.65, saucer ended in last 30 weeks
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ position: 'relative' }}>
@@ -72,13 +72,14 @@ export const RoundingTable: React.FC<{ results: RoundingResult[]; isScanning: bo
 
       <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 940 }}>
             <thead>
               <tr style={{ background: '#0d1018', borderBottom: `1px solid ${BORDER}` }}>
                 <TH label="Ticker" field="symbol" left />
                 <TH label="Date / Time" left />
                 <TH label="Close" field="lastClose" />
                 <TH label="Stage" field="stage" />
+                <TH label="Ended" field="age" />
                 <TH label="Window (weeks)" field="window" />
                 <TH label="Depth" field="depth" />
                 <TH label="Close vs left rim" field="ratio" />
@@ -90,7 +91,7 @@ export const RoundingTable: React.FC<{ results: RoundingResult[]; isScanning: bo
             <tbody>
               {sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ padding: '60px 20px', textAlign: 'center' }}>
+                  <td colSpan={11} style={{ padding: '60px 20px', textAlign: 'center' }}>
                     <div style={{ maxWidth: 360, margin: '0 auto' }}>
                       <div style={{ width: 44, height: 44, borderRadius: 10, background: CARD, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
                         {isScanning ? <Flame size={20} color={TEAL} style={{ animation: 'pulse 1.5s infinite' }} /> : <Eye size={20} color={DIM} />}
@@ -99,7 +100,7 @@ export const RoundingTable: React.FC<{ results: RoundingResult[]; isScanning: bo
                         {isScanning ? 'Scanning weekly charts for rounding bottoms...' : 'Run a scan to see weekly rounding bottoms'}
                       </div>
                       <div style={{ fontSize: 11, color: DIM, lineHeight: 1.6 }}>
-                        Parabola (U-shape) fit on weekly closes, a single bottom, left and right rim within range, depth 8–70%. Includes the current (partial) week.
+                        Parabola (U-shape) fit on weekly closes, a single bottom, left and right rim within range, depth 8–70%. Saucer end is searched over the last 30 weeks. Stage: fresh (complete / nearly complete / forming), retest (price back near the rim) or extended (above 110% of rim).
                       </div>
                     </div>
                   </td>
@@ -125,6 +126,7 @@ export const RoundingTable: React.FC<{ results: RoundingResult[]; isScanning: bo
                   <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                     <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, fontWeight: 700, border: `1px solid ${STAGE_COLOR[r.stage]}`, color: STAGE_COLOR[r.stage], textTransform: 'uppercase' }}>{r.stage}</span>
                   </td>
+                  <td style={{ padding: '12px 14px', textAlign: 'right', fontFamily: MONO, fontSize: 12, color: MUTED }}>{r.age === 0 ? 'this week' : `${r.age}w ago`} <span style={{ color: DIM, fontSize: 10 }}>({r.endDate})</span></td>
                   <td style={{ padding: '12px 14px', textAlign: 'right', fontFamily: MONO, fontSize: 12, color: MUTED }}>{r.window}w <span style={{ color: DIM, fontSize: 10 }}>({r.startDate})</span></td>
                   <td style={{ padding: '12px 14px', textAlign: 'right', fontFamily: MONO, fontSize: 12, color: MUTED }}>{r.depth}%</td>
                   <td style={{ padding: '12px 14px', textAlign: 'right', fontFamily: MONO, fontSize: 12, fontWeight: 600, color: STAGE_COLOR[r.stage] }}>{(r.ratio * 100).toFixed(1)}%</td>

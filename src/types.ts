@@ -122,7 +122,9 @@ export interface RoundingResult {
   leftRim: number;
   bottomLow: number;
   startDate: string;
-  stage: 'complete' | 'nearly complete' | 'forming';
+  endDate: string;           // last week of the saucer
+  age: number;               // weeks since the saucer ended
+  stage: 'complete' | 'nearly complete' | 'forming' | 'extended' | 'retest';
 }
 
 export interface CrsiLowSide {

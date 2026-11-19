@@ -921,7 +921,8 @@ app.get('/api/scan-fib', async (req, res) => {
 
 // === WEEKLY ROUNDING BOTTOM MODULE START [2026-11-18] ===
 // SSE SCAN — weekly rounding bottom (saucer). Daily Yahoo candles are resampled to weekly;
-// the last weekly bar (current week included) is tested against windows of 26/40/60/90/130 weeks.
+// windows of 26/40/60/90/130 weeks are tested ending on any of the last 30 weekly bars (best R² end wins),
+// so fresh, extended and retest saucers are all reported (see stage + age).
 // To revert: delete this block, the import above, scanners.ts, and the "rounding" tab in src/App.tsx.
 app.get('/api/scan-rounding', async (req, res) => {
   const failed: string[] = [];
@@ -964,6 +965,8 @@ app.get('/api/scan-rounding', async (req, res) => {
         window: hit.window, depth: hit.depth, ratio: hit.ratio, r2: hit.r2,
         leftRim: hit.leftRim, bottomLow: hit.bottomLow, stage: hit.stage,
         startDate: new Date(hit.startT).toISOString().slice(0, 10),
+        endDate: new Date(hit.endT).toISOString().slice(0, 10),
+        age: hit.age,
       });
     } catch (_) { failed.push(sym); /* skip failed stocks */ }
 

@@ -71,23 +71,30 @@ export function nearTopLows(values: (number | null)[], times: number[], n = 5, m
   return { now, nearest: best.v, nearestT: best.t, gap, match: Math.abs(gap) <= tol, top };
 }
 
-// ─── Weekly rounding bottom (same rules as the TradingView weekly scanner v3) ───
+// ─── Weekly rounding bottom (same rules as the TradingView weekly indicator v3) ───
+// The window no longer has to end on the latest bar: the end is scanned over the last MAX_AGE weeks
+// and the end with the best parabola R² wins, so the box sits on the real saucer.
+export type RoundingStage = 'complete' | 'nearly complete' | 'forming' | 'extended' | 'retest';
+
 export interface RoundingHit {
   window: number;       // weekly bars
   depth: number;        // % (rim -> lowest close)
-  ratio: number;        // last close / left rim
+  ratio: number;        // last close / left rim (today)
   r2: number;
   leftRim: number;
   bottomLow: number;    // lowest low inside the window
   startT: number;
-  stage: 'complete' | 'nearly complete' | 'forming';
+  endT: number;         // last bar of the saucer
+  age: number;          // weeks since the saucer ended (0 = ends on the latest bar)
+  stage: RoundingStage;
 }
 
 const WINDOWS = [26, 40, 60, 90, 130];
+const MAX_AGE = 30;     // how many weeks back the saucer may have ended
 
-function detectWindow(closes: number[], lows: number[], L: number) {
-  const n = closes.length;
-  const s = n - L;                                   // first index of window
+function detectWindow(closes: number[], lows: number[], L: number, e: number) {
+  // window = bars [e-L+1 .. e]
+  const s = e - L + 1;
   let sx2 = 0, sx4 = 0, sy = 0, sxy = 0, sx2y = 0;
   for (let i = 0; i < L; i++) {
     const y = closes[s + i];
@@ -123,31 +130,55 @@ function detectWindow(closes: number[], lows: number[], L: number) {
   const xv = c > 0 ? -b / (2 * c) : 99;
   const k = Math.max(3, Math.floor(L * 0.05));
   let lr = 0, rr = 0;
-  for (let i = 0; i < k; i++) { lr += closes[s + i]; rr += closes[n - 1 - i]; }
+  for (let i = 0; i < k; i++) { lr += closes[s + i]; rr += closes[e - i]; }
   lr /= k; rr /= k;
   const mr = Math.min(lr, rr);
   const depth = ((mr - minv) / mr) * 100;
-  const ratio = closes[n - 1] / lr;
+  const endRatio = closes[e] / lr;
   const ok = c > 0 && r2 >= 0.65 && xv > -0.6 && xv < 0.6 &&
     mini >= L * 0.25 && mini <= L * 0.75 && !broken &&
     rr / lr >= 0.80 && rr / lr <= 1.15 &&
-    depth >= 8 && depth <= 70 && ratio >= 0.80 && ratio <= 1.15;
-  return { ok, r2, depth, ratio, lr, botLow };
+    depth >= 8 && depth <= 70 && endRatio >= 0.80 && endRatio <= 1.15;
+  return { ok, r2, depth, lr, botLow };
 }
 
-// Looks at the LAST weekly bar (current week included) and returns the first window that fits.
+// Today's close vs left rim + saucer age -> stage.
+//   age <= 2 weeks : complete (>=100%) / nearly complete (93-100%) / forming (<93%)
+//   age  > 2 weeks : extended (>110% of rim) / retest (95-110%); below 95% = pattern failed, dropped
+function stageOf(age: number, ratioNow: number): RoundingStage | null {
+  if (age <= 2) return ratioNow >= 1.0 ? 'complete' : ratioNow >= 0.93 ? 'nearly complete' : 'forming';
+  if (ratioNow > 1.10) return 'extended';
+  if (ratioNow >= 0.95) return 'retest';
+  return null;
+}
+
+// First window (26 -> 130) that has a valid saucer ending within the last MAX_AGE weeks; for that window
+// the end with the best R² is used. A saucer is dropped if any later low undercuts its bottom low.
 export function roundingBottomWeekly(weekly: Bar[]): RoundingHit | null {
+  const n = weekly.length;
   const closes = weekly.map(b => b.c);
   const lows = weekly.map(b => b.l);
+  const last = closes[n - 1];
   for (const L of WINDOWS) {
-    if (closes.length < L + 5) continue;
-    const r = detectWindow(closes, lows, L);
-    if (r.ok) {
-      const stage = r.ratio >= 1.0 ? 'complete' : r.ratio >= 0.93 ? 'nearly complete' : 'forming';
+    let best: { age: number; r2: number; depth: number; lr: number; botLow: number; stage: RoundingStage } | null = null;
+    for (let age = 0; age <= MAX_AGE; age++) {
+      const e = n - 1 - age;
+      if (e - L + 1 < 0 || e + 1 < L + 5) break;
+      const r = detectWindow(closes, lows, L, e);
+      if (!r.ok) continue;
+      let undercut = false;
+      for (let q = e + 1; q < n; q++) if (lows[q] < r.botLow) { undercut = true; break; }
+      if (undercut) continue;
+      const stage = stageOf(age, last / r.lr);
+      if (!stage) continue;
+      if (!best || r.r2 > best.r2) best = { age, r2: r.r2, depth: r.depth, lr: r.lr, botLow: r.botLow, stage };
+    }
+    if (best) {
+      const e = n - 1 - best.age;
       return {
-        window: L, depth: +r.depth.toFixed(1), ratio: +r.ratio.toFixed(3), r2: +r.r2.toFixed(2),
-        leftRim: +r.lr.toFixed(2), bottomLow: +r.botLow.toFixed(2),
-        startT: weekly[weekly.length - L].t, stage,
+        window: L, depth: +best.depth.toFixed(1), ratio: +(last / best.lr).toFixed(3), r2: +best.r2.toFixed(2),
+        leftRim: +best.lr.toFixed(2), bottomLow: +best.botLow.toFixed(2),
+        startT: weekly[e - L + 1].t, endT: weekly[e].t, age: best.age, stage: best.stage,
       };
     }
   }
