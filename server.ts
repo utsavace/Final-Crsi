@@ -149,7 +149,7 @@ function calcCRSI(closes: number[]): (number | null)[] {
   );
 }
 
-interface Bar { t: number; o: number; h: number; l: number; c: number; }
+interface Bar { t: number; o: number; h: number; l: number; c: number; v?: number; }
 
 // === POSITION-SIZING FEATURE START [2026-08-18] ===
 // ATR(14) via Wilder smoothing — used for volatility-based stop-loss & position sizing.
@@ -639,7 +639,7 @@ async function fetchYahooChart(symbol: string): Promise<Bar[] | null> {
         const o = quote.open?.[idx], h = quote.high?.[idx],
               l = quote.low?.[idx],  c = quote.close?.[idx];
         if (o != null && h != null && l != null && c != null)
-          bars.push({ t: timestamps[idx] * 1000, o: +o, h: +h, l: +l, c: +c });
+          bars.push({ t: timestamps[idx] * 1000, o: +o, h: +h, l: +l, c: +c, v: +(quote.volume?.[idx] ?? 0) });
       }
       if (bars.length >= 220) return bars;
     } catch (_) { /* try next */ }
@@ -921,8 +921,7 @@ app.get('/api/scan-fib', async (req, res) => {
 
 // === WEEKLY ROUNDING BOTTOM MODULE START [2026-11-18] ===
 // SSE SCAN — weekly rounding bottom (saucer). Daily Yahoo candles are resampled to weekly;
-// windows of 26/40/60/90/130 weeks are tested ending on any of the last 30 weekly bars (best R² end wins),
-// so fresh, extended and retest saucers are all reported (see stage + age).
+// structure-based (rim -> single bottom -> right end), price + volume-MA scoring, see scanners.ts.
 // To revert: delete this block, the import above, scanners.ts, and the "rounding" tab in src/App.tsx.
 app.get('/api/scan-rounding', async (req, res) => {
   const failed: string[] = [];
@@ -966,7 +965,8 @@ app.get('/api/scan-rounding', async (req, res) => {
         leftRim: hit.leftRim, bottomLow: hit.bottomLow, stage: hit.stage,
         startDate: new Date(hit.startT).toISOString().slice(0, 10),
         endDate: new Date(hit.endT).toISOString().slice(0, 10),
-        age: hit.age,
+        age: hit.age, tier: hit.tier, score: hit.score,
+        volFall: hit.volFall, volRec: hit.volRec, pullback: hit.pullback,
       });
     } catch (_) { failed.push(sym); /* skip failed stocks */ }
 

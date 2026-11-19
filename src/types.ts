@@ -124,7 +124,12 @@ export interface RoundingResult {
   startDate: string;
   endDate: string;           // last week of the saucer
   age: number;               // weeks since the saucer ended
-  stage: 'complete' | 'nearly complete' | 'forming' | 'extended' | 'retest';
+  stage: 'forming' | 'fresh' | 'retest' | 'extended';
+  tier: 'A' | 'B';           // A = best (volume U also strong), B = ok
+  score: number;             // 0..1 price + volume shape score
+  volFall: number;           // volume-MA at bottom / at left rim
+  volRec: number;            // volume-MA recovery on the right side (0..1+)
+  pullback: number;          // deepest pullback in the right leg (fraction of the rally)
 }
 
 export interface CrsiLowSide {
